@@ -84,7 +84,7 @@ giorni_teorici = (giorni_anno / 12) × mesi_lavorati
 
 ## Note Importanti
 
-1. **Malattia/Infortunio**: I periodi di malattia vanno contati nel REALE ma NON nel TEORICO (sono già compresi nel periodo lavorativo principale)
+1. **Malattia/Infortunio/Maternità/Congedi**: I giorni vanno contati nel REALE ma NON nel TEORICO (sono già compresi nel periodo lavorativo principale). Nel calcolo TEORICO contano solo i record con **gruppo** (P.A.L.S. Obbligatoria)
 
 2. **Anno 1997**: È un anno di transizione. Distinguere i periodi prima e dopo il 1° agosto:
    - Prima di agosto: usare le regole 1993-1997

@@ -286,24 +286,52 @@ class CalcolatoreContributi:
     
     def _calcola_spettacolo(self):
         """Calcola contributi Lavoratori Spettacolo"""
+        # Prima passa: somma giorni REALI per tutti i record con giorni
+        # e raccogli i periodi con gruppo per calcolo TEORICO
+        periodi_per_anno = defaultdict(list)  # anno -> [(mese_inizio, mese_fine, gruppo)]
+
         for record in self.dati["spettacolo"]:
-            anno, mese, _ = self._parse_data(record["dal"])
+            anno_inizio, mese_inizio, _ = self._parse_data(record["dal"])
+            anno_fine, mese_fine, _ = self._parse_data(record["al"])
             giorni = record.get("giorni")
             gruppo = record.get("gruppo")
 
-            # REALE: giorni diretti (se presenti)
+            # REALE: somma tutti i giorni (inclusi malattia, maternita', ecc.)
             if giorni:
-                self.reale_per_anno[anno] += giorni
+                self.reale_per_anno[anno_inizio] += giorni
 
-            # TEORICO: solo per record con giorni (no malattia)
-            if giorni and gruppo:
-                mesi = self._conta_mesi(record["dal"], record["al"])
-                giorni_teorici = self._calcola_teorico_spettacolo(anno, mese, mesi, gruppo)
-                self.teorico_per_anno[anno] += giorni_teorici
-                self.mesi_per_anno[anno] += mesi
+            # Per TEORICO: raccogli solo i periodi con gruppo (P.A.L.S. Obbligatoria)
+            if gruppo:
+                # Gestisce periodi che coprono piu' anni
+                if anno_inizio == anno_fine:
+                    periodi_per_anno[anno_inizio].append((mese_inizio, mese_fine, gruppo))
+                else:
+                    # Periodo che attraversa anni: spezza per anno
+                    periodi_per_anno[anno_inizio].append((mese_inizio, 12, gruppo))
+                    for anno in range(anno_inizio + 1, anno_fine):
+                        periodi_per_anno[anno].append((1, 12, gruppo))
+                    periodi_per_anno[anno_fine].append((1, mese_fine, gruppo))
 
                 self.ultimo_regime = "spettacolo"
                 self.ultimo_gruppo = gruppo
+
+        # Seconda passa: calcola TEORICO unificando i periodi per ogni anno
+        for anno, periodi in periodi_per_anno.items():
+            # Unifica i mesi coperti (evita duplicati)
+            mesi_coperti = set()
+            gruppo_anno = None
+            for mese_inizio, mese_fine, gruppo in periodi:
+                for m in range(mese_inizio, mese_fine + 1):
+                    mesi_coperti.add(m)
+                gruppo_anno = gruppo  # Usa l'ultimo gruppo trovato
+
+            mesi = len(mesi_coperti)
+            if mesi > 0 and gruppo_anno:
+                # Usa il primo mese coperto per determinare le regole
+                primo_mese = min(mesi_coperti)
+                giorni_teorici = self._calcola_teorico_spettacolo(anno, primo_mese, mesi, gruppo_anno)
+                self.teorico_per_anno[anno] += giorni_teorici
+                self.mesi_per_anno[anno] += mesi
     
     def _calcola_teorico_spettacolo(self, anno, mese_inizio, mesi, gruppo):
         """
