@@ -62,5 +62,3 @@ teorico anticipata
 1987	60  4	11
 1988	180	11	1 anno 10 mesi
 
-
-

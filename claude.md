@@ -4,9 +4,11 @@
 
 Dato un documento con l'estratto previdenziale INPS, costruire un foglio Excel con:
 - **Colonne REALI**: Anno + Giorni contributivi effettivamente versati
-- **Colonne TEORICHE**: Anno + Giorni contributivi teorici secondo le regole previdenziali
+- **Colonne TEORICHE**: Anno + Giorni contributivi teorici + Mesi + Anni e Mesi Cumulativi
 
 Gli anni devono essere raggruppati (non ripetuti) e vanno mostrati tutti gli anni dal primo all'ultimo, inserendo 0 dove non ci sono contributi.
+
+**Obiettivo finale**: Estendere il calcolo fino a raggiungere **42 anni e 10 mesi** (514 mesi totali) di contributi teorici.
 
 ---
 
@@ -110,12 +112,15 @@ giorni_teorici = (giorni_anno / 12) × mesi_lavorati
 
 ### Output Excel
 
-| Anno | Giorni REALI | | Anno | Giorni TEORICI |
-|------|--------------|--|------|----------------|
-| 1981 | 102          | | 1981 | 104            |
-| 1982 | 84           | | 1982 | 78             |
-| ...  | ...          | | ...  | ...            |
-| 1987 | 90           | | 1987 | 60             |
+| Anno | Giorni REALI | | Anno | Giorni TEORICI | Mesi | Anni e Mesi Cumulativi |
+|------|--------------|--|------|----------------|------|------------------------|
+| 1981 | 102          | | 1981 | 104            | 4    | 0a 4m                  |
+| 1982 | 84           | | 1982 | 78             | 3    | 0a 7m                  |
+| ...  | ...          | | ...  | ...            | ...  | ...                    |
+| 1987 | 90           | | 1987 | 60             | 4    | 1a 3m                  |
+| ...  | ...          | | ...  | ...            | ...  | ...                    |
+| 2024 | 0            | | 2024 | 312            | 12   | 42a 10m                |
+| TOTALE | XXXX       | | TOTALE | XXXXX        | 514  | 42a 10m                |
 
 ### Spiegazione calcoli:
 
@@ -124,3 +129,30 @@ giorni_teorici = (giorni_anno / 12) × mesi_lavorati
 
 **REALE 1987**: 90 giorni (già in giorni)
 **TEORICO 1987**: Gruppo 2, anno ≤1992 → 180 gg/anno → (180/12) × 4 mesi = 60 giorni
+
+**Anni futuri**: Gli anni dopo l'ultimo lavorato vengono estesi fino a raggiungere 42 anni e 10 mesi (514 mesi), usando l'ultimo regime (Generale o Spettacolo con relativo gruppo).
+
+---
+
+## Struttura Output
+
+```
+previdenza/
+├── contributi_inps.py
+├── CLAUDE.md
+├── output/
+│   ├── mario_rossi_estratto.json
+│   ├── mario_rossi_contributi.xlsx
+│   ├── luigi_bianchi_estratto.json
+│   └── luigi_bianchi_contributi.xlsx
+```
+
+### Uso
+
+```bash
+python contributi_inps.py <nome_file.pdf>
+```
+
+I file di output vengono salvati nella cartella `output/` con il nome del PDF come prefisso:
+- `{nome}_estratto.json` - dati grezzi estratti dal PDF
+- `{nome}_contributi.xlsx` - calcolo finale con estensione a 42a 10m

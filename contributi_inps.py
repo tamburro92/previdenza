@@ -188,11 +188,14 @@ class EstrattorePDF:
 
 class CalcolatoreContributi:
     """Classe per calcolare i contributi REALI e TEORICI"""
-    
+
     def __init__(self, dati_estratti):
         self.dati = dati_estratti
         self.reale_per_anno = defaultdict(int)
         self.teorico_per_anno = defaultdict(int)
+        self.mesi_per_anno = defaultdict(int)  # Mesi teorici per anno
+        self.ultimo_regime = None  # Per estensione anni futuri
+        self.ultimo_gruppo = None  # Gruppo spettacolo se applicabile
         self.anno_min = None
         self.anno_max = None
     
@@ -201,10 +204,12 @@ class CalcolatoreContributi:
         self._calcola_regime_generale()
         self._calcola_spettacolo()
         self._determina_range_anni()
-        
+        self._estendi_a_42_anni_10_mesi()
+
         return {
             "reale": dict(self.reale_per_anno),
             "teorico": dict(self.teorico_per_anno),
+            "mesi": dict(self.mesi_per_anno),
             "anno_min": self.anno_min,
             "anno_max": self.anno_max
         }
@@ -225,15 +230,18 @@ class CalcolatoreContributi:
         for record in self.dati["regime_generale"]:
             anno = self._parse_data(record["dal"])[0]
             settimane = record["settimane"]
-            
+
             # REALE: settimane * 6
             giorni_reali = settimane * 6
             self.reale_per_anno[anno] += giorni_reali
-            
+
             # TEORICO: mesi * 26
             mesi = self._conta_mesi(record["dal"], record["al"])
             giorni_teorici = mesi * 26
             self.teorico_per_anno[anno] += giorni_teorici
+            self.mesi_per_anno[anno] += mesi
+
+            self.ultimo_regime = "generale"
     
     def _calcola_spettacolo(self):
         """Calcola contributi Lavoratori Spettacolo"""
@@ -241,16 +249,20 @@ class CalcolatoreContributi:
             anno, mese, _ = self._parse_data(record["dal"])
             giorni = record.get("giorni")
             gruppo = record.get("gruppo")
-            
+
             # REALE: giorni diretti (se presenti)
             if giorni:
                 self.reale_per_anno[anno] += giorni
-            
+
             # TEORICO: solo per record con giorni (no malattia)
             if giorni and gruppo:
                 mesi = self._conta_mesi(record["dal"], record["al"])
                 giorni_teorici = self._calcola_teorico_spettacolo(anno, mese, mesi, gruppo)
                 self.teorico_per_anno[anno] += giorni_teorici
+                self.mesi_per_anno[anno] += mesi
+
+                self.ultimo_regime = "spettacolo"
+                self.ultimo_gruppo = gruppo
     
     def _calcola_teorico_spettacolo(self, anno, mese_inizio, mesi, gruppo):
         """
@@ -285,6 +297,39 @@ class CalcolatoreContributi:
         if tutti_anni:
             self.anno_min = min(tutti_anni)
             self.anno_max = max(tutti_anni)
+
+    def _estendi_a_42_anni_10_mesi(self):
+        """Estende il calcolo fino a raggiungere 42 anni e 10 mesi (514 mesi)"""
+        OBIETTIVO_MESI = 514  # 42 anni * 12 + 10 mesi
+
+        # Calcola mesi gia' accumulati
+        mesi_accumulati = sum(self.mesi_per_anno.values())
+
+        if mesi_accumulati >= OBIETTIVO_MESI:
+            return  # Gia' raggiunto obiettivo
+
+        mesi_mancanti = OBIETTIVO_MESI - mesi_accumulati
+        anno_corrente = self.anno_max + 1
+
+        while mesi_mancanti > 0:
+            mesi_anno = min(12, mesi_mancanti)
+            self.mesi_per_anno[anno_corrente] = mesi_anno
+
+            # Calcola giorni teorici in base all'ultimo regime
+            if self.ultimo_regime == "generale":
+                giorni_teorici = mesi_anno * 26
+            else:  # spettacolo
+                giorni_teorici = self._calcola_teorico_spettacolo(
+                    anno_corrente, 1, mesi_anno, self.ultimo_gruppo or 2
+                )
+
+            self.teorico_per_anno[anno_corrente] = giorni_teorici
+            self.reale_per_anno[anno_corrente] = 0  # Nessun contributo reale
+
+            mesi_mancanti -= mesi_anno
+            anno_corrente += 1
+
+        self.anno_max = anno_corrente - 1
 
 
 # =============================================================================
@@ -323,7 +368,7 @@ class GeneratoreExcel:
     
     def _crea_headers(self):
         """Crea le intestazioni"""
-        headers = ["Anno", "Giorni REALI", "", "Anno", "Giorni TEORICI"]
+        headers = ["Anno", "Giorni REALI", "", "Anno", "Giorni TEORICI", "Mesi", "Anni e Mesi Cumulativi"]
         for col, header in enumerate(headers, 1):
             cell = self.ws.cell(row=1, column=col, value=header)
             if header:
@@ -336,50 +381,75 @@ class GeneratoreExcel:
         """Popola i dati per ogni anno"""
         anno_min = self.risultati["anno_min"]
         anno_max = self.risultati["anno_max"]
-        
+
         if not anno_min or not anno_max:
             return
-        
+
+        mesi_cumulativi = 0
+
         for i, anno in enumerate(range(anno_min, anno_max + 1), 2):
             reale = self.risultati["reale"].get(anno, 0)
             teorico = self.risultati["teorico"].get(anno, 0)
-            
-            # Colonne REALI
+            mesi = self.risultati["mesi"].get(anno, 0)
+
+            # Colonne REALI (A, B)
             self.ws.cell(row=i, column=1, value=anno).border = self.border
             self.ws.cell(row=i, column=1).alignment = self.center
             self.ws.cell(row=i, column=2, value=reale).border = self.border
             self.ws.cell(row=i, column=2).alignment = self.center
-            
-            # Colonne TEORICI
+
+            # Colonne TEORICI (D, E)
             self.ws.cell(row=i, column=4, value=anno).border = self.border
             self.ws.cell(row=i, column=4).alignment = self.center
             self.ws.cell(row=i, column=5, value=teorico).border = self.border
             self.ws.cell(row=i, column=5).alignment = self.center
+
+            # Mesi (F)
+            self.ws.cell(row=i, column=6, value=mesi).border = self.border
+            self.ws.cell(row=i, column=6).alignment = self.center
+
+            # Anni e Mesi Cumulativi (G)
+            mesi_cumulativi += mesi
+            anni_cum = mesi_cumulativi // 12
+            mesi_cum = mesi_cumulativi % 12
+            formato_cumulativo = f"{anni_cum}a {mesi_cum}m"
+            self.ws.cell(row=i, column=7, value=formato_cumulativo).border = self.border
+            self.ws.cell(row=i, column=7).alignment = self.center
     
     def _aggiungi_totali(self):
         """Aggiunge la riga dei totali"""
         anno_min = self.risultati["anno_min"]
         anno_max = self.risultati["anno_max"]
-        
+
         if not anno_min or not anno_max:
             return
-        
+
         num_anni = anno_max - anno_min + 1
         last_row = num_anni + 2
-        
+
         # Totale REALE
         self.ws.cell(row=last_row, column=1, value="TOTALE").font = Font(bold=True)
         self.ws.cell(row=last_row, column=1).border = self.border
         self.ws.cell(row=last_row, column=2, value=f"=SUM(B2:B{last_row-1})").font = Font(bold=True)
         self.ws.cell(row=last_row, column=2).border = self.border
         self.ws.cell(row=last_row, column=2).alignment = self.center
-        
+
         # Totale TEORICO
         self.ws.cell(row=last_row, column=4, value="TOTALE").font = Font(bold=True)
         self.ws.cell(row=last_row, column=4).border = self.border
         self.ws.cell(row=last_row, column=5, value=f"=SUM(E2:E{last_row-1})").font = Font(bold=True)
         self.ws.cell(row=last_row, column=5).border = self.border
         self.ws.cell(row=last_row, column=5).alignment = self.center
+
+        # Totale Mesi
+        self.ws.cell(row=last_row, column=6, value=f"=SUM(F2:F{last_row-1})").font = Font(bold=True)
+        self.ws.cell(row=last_row, column=6).border = self.border
+        self.ws.cell(row=last_row, column=6).alignment = self.center
+
+        # Label finale per Anni e Mesi Cumulativi (42a 10m)
+        self.ws.cell(row=last_row, column=7, value="42a 10m").font = Font(bold=True)
+        self.ws.cell(row=last_row, column=7).border = self.border
+        self.ws.cell(row=last_row, column=7).alignment = self.center
     
     def _imposta_larghezza_colonne(self):
         """Imposta la larghezza delle colonne"""
@@ -388,6 +458,8 @@ class GeneratoreExcel:
         self.ws.column_dimensions['C'].width = 5
         self.ws.column_dimensions['D'].width = 12
         self.ws.column_dimensions['E'].width = 18
+        self.ws.column_dimensions['F'].width = 10
+        self.ws.column_dimensions['G'].width = 24
 
 
 # =============================================================================
@@ -402,26 +474,29 @@ def main():
         epilog="""
 Esempio:
     python contributi_inps.py certificazione.pdf
-    python contributi_inps.py certificazione.pdf --output-dir ./risultati
+    python contributi_inps.py mario_rossi.pdf
         """
     )
     parser.add_argument("pdf", help="Percorso del file PDF INPS")
-    parser.add_argument("--output-dir", "-o", default=".", help="Cartella di output (default: corrente)")
-    
+
     args = parser.parse_args()
-    
+
     # Verifica esistenza PDF
     if not os.path.exists(args.pdf):
         print(f"Errore: File non trovato: {args.pdf}")
         sys.exit(1)
-    
-    # Crea cartella output se non esiste
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
-    
-    # Percorsi output
-    json_path = os.path.join(args.output_dir, "contributi_estratti.json")
-    excel_path = os.path.join(args.output_dir, "contributi_previdenziali.xlsx")
+
+    # Cartella output fissa
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Prefisso basato sul nome del PDF (senza estensione)
+    pdf_basename = os.path.splitext(os.path.basename(args.pdf))[0]
+
+    # Percorsi output con prefisso
+    json_path = os.path.join(output_dir, f"{pdf_basename}_estratto.json")
+    excel_path = os.path.join(output_dir, f"{pdf_basename}_contributi.xlsx")
     
     print("=" * 60)
     print("CALCOLO CONTRIBUTI PREVIDENZIALI INPS")
@@ -452,14 +527,17 @@ Esempio:
     # Riepilogo
     totale_reale = sum(risultati["reale"].values())
     totale_teorico = sum(risultati["teorico"].values())
+    totale_mesi = sum(risultati["mesi"].values())
     num_anni = risultati["anno_max"] - risultati["anno_min"] + 1 if risultati["anno_min"] else 0
-    
+
     print("\n" + "=" * 60)
     print("RIEPILOGO")
     print("=" * 60)
     print(f"Anni elaborati:      {num_anni} ({risultati['anno_min']} - {risultati['anno_max']})")
     print(f"Totale giorni REALI: {totale_reale}")
     print(f"Totale giorni TEORICI: {totale_teorico}")
+    print(f"Totale mesi teorici: {totale_mesi} ({totale_mesi // 12}a {totale_mesi % 12}m)")
+    print(f"Totale giorni per 42a 10m: {totale_teorico}")
     print(f"\nFile generati:")
     print(f"  - {json_path}")
     print(f"  - {excel_path}")
