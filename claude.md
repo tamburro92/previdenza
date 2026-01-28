@@ -86,17 +86,20 @@ giorni_teorici = (giorni_anno / 12) × mesi_lavorati
 
 1. **Malattia/Infortunio/Maternità/Congedi**: I giorni vanno contati nel REALE ma NON nel TEORICO (sono già compresi nel periodo lavorativo principale). Nel calcolo TEORICO contano solo i record con **gruppo** (P.A.L.S. Obbligatoria)
 
-2. **Anno 1997**: È un anno di transizione. Distinguere i periodi prima e dopo il 1° agosto:
-   - Prima di agosto: usare le regole 1993-1997
-   - Da agosto in poi: usare 312 giorni/anno (tempo indeterminato)
+2. **Anno 1997**: È un anno di transizione. Calcolare proporzionalmente:
+   - Gen-Lug (7 mesi): regole 1993-1997 (Gruppo 1 = 120, Gruppo 2 = 260)
+   - Ago-Dic (5 mesi): nuove regole (Gruppo 1 = 120, Gruppo 2 = 312)
+   - Esempio Gruppo 2: (260 × 7 / 12) + (312 × 5 / 12) = 151 + 130 = 281 (arrotonda per difetto)
 
-3. **Anni senza contributi**: Inserire 0 (non omettere l'anno)
+3. **Ultimo anno lavorato**: Sempre completato a 12 mesi nel TEORICO (anche se ha lavorato solo parte dell'anno)
 
-4. **Gruppi**:
+4. **Anni senza contributi**: Inserire 0 (non omettere l'anno)
+
+5. **Gruppi**:
    - Gruppo 1: Artisti
    - Gruppo 2: Impiegati / Maestranze
 
-5. **Codici qualifica comuni**:
+6. **Codici qualifica comuni**:
    - 110: Gruppo tecnici
    - 113: Tecnici del montaggio, del suono e sound designer
    - 201: Impiegati amministrativi e tecnici

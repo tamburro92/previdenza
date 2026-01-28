@@ -26,7 +26,6 @@ import json
 import re
 import sys
 import os
-import math
 import argparse
 from collections import defaultdict
 from openpyxl import Workbook
@@ -327,38 +326,54 @@ class CalcolatoreContributi:
 
             mesi = len(mesi_coperti)
             if mesi > 0 and gruppo_anno:
-                # Usa il primo mese coperto per determinare le regole
-                primo_mese = min(mesi_coperti)
-                giorni_teorici = self._calcola_teorico_spettacolo(anno, primo_mese, mesi, gruppo_anno)
+                giorni_teorici = self._calcola_teorico_spettacolo_con_mesi(anno, mesi_coperti, gruppo_anno)
                 self.teorico_per_anno[anno] += giorni_teorici
                 self.mesi_per_anno[anno] += mesi
     
-    def _calcola_teorico_spettacolo(self, anno, mese_inizio, mesi, gruppo):
+    def _calcola_teorico_spettacolo_con_mesi(self, anno, mesi_coperti, gruppo):
         """
-        Calcola giorni teorici per Spettacolo in base alle regole:
+        Calcola giorni teorici per Spettacolo considerando i mesi effettivi.
+        Per il 1997 calcola proporzionalmente prima e dopo agosto.
+
+        Regole:
         - Fino al 1992: Gruppo 1 = 60 gg/anno, Gruppo 2 = 180 gg/anno
         - 1993 - luglio 1997: Gruppo 1 = 120 gg/anno, Gruppo 2 = 260 gg/anno
-        - Da agosto 1997 (tempo indeterminato): 312 gg/anno per tutti
+        - Da agosto 1997 in poi: Gruppo 1 = 120 gg/anno, Gruppo 2 = 312 gg/anno
         """
-        # Fino al 1992 compreso
         if anno <= 1992:
-            if gruppo == 1:
-                giorni_anno = 60
-            else:
-                giorni_anno = 180
-        
-        # Dal 1993 al 31 luglio 1997
-        elif anno < 1997 or (anno == 1997 and mese_inizio < 8):
-            if gruppo == 1:
-                giorni_anno = 120
-            else:
-                giorni_anno = 260
-        
-        # Dal 1 agosto 1997 in poi (tempo indeterminato)
-        else:
-            giorni_anno = 312
-        
-        return math.ceil((giorni_anno / 12) * mesi)
+            giorni_anno = 60 if gruppo == 1 else 180
+            return int((giorni_anno / 12) * len(mesi_coperti))
+
+        elif anno >= 1993 and anno < 1997:
+            giorni_anno = 120 if gruppo == 1 else 260
+            return int((giorni_anno / 12) * len(mesi_coperti))
+
+        elif anno == 1997:
+            # Anno di transizione: calcola proporzionalmente
+            # Gen-Lug (mesi 1-7): regole 1993-1997
+            # Ago-Dic (mesi 8-12): nuove regole
+            mesi_prima_agosto = [m for m in mesi_coperti if m <= 7]
+            mesi_da_agosto = [m for m in mesi_coperti if m >= 8]
+
+            giorni_prima = 120 if gruppo == 1 else 260
+            giorni_dopo = 120 if gruppo == 1 else 312
+
+            teorico_prima = int((giorni_prima / 12) * len(mesi_prima_agosto))
+            teorico_dopo = int((giorni_dopo / 12) * len(mesi_da_agosto))
+
+            return teorico_prima + teorico_dopo
+
+        else:  # anno >= 1998
+            giorni_anno = 120 if gruppo == 1 else 312
+            return int((giorni_anno / 12) * len(mesi_coperti))
+
+    def _calcola_teorico_spettacolo(self, anno, mese_inizio, mesi, gruppo):
+        """
+        Versione semplificata per estensione anni futuri.
+        Usa le regole post-1997.
+        """
+        giorni_anno = 120 if gruppo == 1 else 312
+        return int((giorni_anno / 12) * mesi)
     
     def _determina_range_anni(self):
         """Determina anno minimo e massimo dai dati"""
@@ -369,6 +384,9 @@ class CalcolatoreContributi:
 
     def _estendi_a_obiettivo(self):
         """Estende il calcolo fino a raggiungere l'obiettivo contributivo (basato sul sesso)"""
+        # Prima: completa l'ultimo anno lavorato a 12 mesi
+        self._completa_ultimo_anno()
+
         # Calcola mesi gia' accumulati
         mesi_accumulati = sum(self.mesi_per_anno.values())
 
@@ -397,6 +415,24 @@ class CalcolatoreContributi:
             anno_corrente += 1
 
         self.anno_max = anno_corrente - 1
+
+    def _completa_ultimo_anno(self):
+        """Completa l'ultimo anno lavorato a 12 mesi nel TEORICO"""
+        if not self.anno_max:
+            return
+
+        mesi_ultimo_anno = self.mesi_per_anno.get(self.anno_max, 0)
+        if mesi_ultimo_anno > 0 and mesi_ultimo_anno < 12:
+            # Completa a 12 mesi
+            self.mesi_per_anno[self.anno_max] = 12
+
+            # Ricalcola giorni teorici per l'anno completo
+            if self.ultimo_regime == "generale":
+                self.teorico_per_anno[self.anno_max] = 12 * 26  # 312
+            else:  # spettacolo
+                gruppo = self.ultimo_gruppo or 2
+                giorni_anno = 120 if gruppo == 1 else 312
+                self.teorico_per_anno[self.anno_max] = giorni_anno
 
 
 # =============================================================================
