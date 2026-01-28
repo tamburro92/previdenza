@@ -71,7 +71,9 @@ class EstrattorePDF:
             "spettacolo": [],
             "metadata": {
                 "file": pdf_path,
-                "codice_fiscale": None
+                "codice_fiscale": None,
+                "cognome": None,
+                "nome": None
             }
         }
     
@@ -88,9 +90,20 @@ class EstrattorePDF:
         """Estrae metadata dalla prima pagina"""
         if page_num == 0:
             text = page.extract_text()
+
+            # Estrai codice fiscale
             cf_match = re.search(r'([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])', text)
             if cf_match:
                 self.dati["metadata"]["codice_fiscale"] = cf_match.group(1)
+
+            # Estrai cognome e nome da "Estratto conto di COGNOME NOME CODICEFISCALE"
+            nome_match = re.search(r'Estratto\s+conto\s+di\s+([A-Z][A-Z\s]+?)\s+([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])', text)
+            if nome_match:
+                nome_completo = nome_match.group(1).strip()
+                parti = nome_completo.split()
+                if len(parti) >= 2:
+                    self.dati["metadata"]["cognome"] = parti[0]
+                    self.dati["metadata"]["nome"] = ' '.join(parti[1:])
     
     def _estrai_tabelle(self, page):
         """Estrae le tabelle dalla pagina"""
@@ -352,16 +365,15 @@ class CalcolatoreContributi:
             # Anno di transizione: calcola proporzionalmente
             # Gen-Lug (mesi 1-7): regole 1993-1997
             # Ago-Dic (mesi 8-12): nuove regole
-            mesi_prima_agosto = [m for m in mesi_coperti if m <= 7]
-            mesi_da_agosto = [m for m in mesi_coperti if m >= 8]
+            mesi_prima_agosto = len([m for m in mesi_coperti if m <= 7])
+            mesi_da_agosto = len([m for m in mesi_coperti if m >= 8])
 
             giorni_prima = 120 if gruppo == 1 else 260
             giorni_dopo = 120 if gruppo == 1 else 312
 
-            teorico_prima = int((giorni_prima / 12) * len(mesi_prima_agosto))
-            teorico_dopo = int((giorni_dopo / 12) * len(mesi_da_agosto))
-
-            return teorico_prima + teorico_dopo
+            # Calcola tutto insieme e arrotonda una volta sola
+            totale = (giorni_prima * mesi_prima_agosto + giorni_dopo * mesi_da_agosto) / 12
+            return round(totale)
 
         else:  # anno >= 1998
             giorni_anno = 120 if gruppo == 1 else 312
@@ -606,23 +618,29 @@ Esempio:
 
     # Decodifica sesso dal codice fiscale
     codice_fiscale = dati["metadata"].get("codice_fiscale")
+    cognome = dati["metadata"].get("cognome")
+    nome = dati["metadata"].get("nome")
     sesso = decodifica_sesso_da_cf(codice_fiscale)
     sesso_label = "Donna" if sesso == 'F' else "Uomo" if sesso == 'M' else "Non determinato"
 
     print(f"      - Codice Fiscale: {codice_fiscale}")
+    if cognome and nome:
+        print(f"      - Cognome e Nome: {cognome} {nome}")
     print(f"      - Sesso: {sesso_label}")
     print(f"      - Regime generale: {len(dati['regime_generale'])} record")
     print(f"      - Spettacolo: {len(dati['spettacolo'])} record")
 
-    # Percorsi output basati sul codice fiscale
-    if codice_fiscale:
-        json_path = os.path.join(output_dir, f"{codice_fiscale}.json")
-        excel_path = os.path.join(output_dir, f"{codice_fiscale}.xlsx")
+    # Nome file basato su Cognome Nome, fallback a codice fiscale
+    if cognome and nome:
+        nome_file = f"{cognome} {nome}"
+    elif codice_fiscale:
+        nome_file = codice_fiscale
     else:
-        # Fallback al nome del PDF se CF non trovato
-        pdf_basename = os.path.splitext(os.path.basename(args.pdf))[0]
-        json_path = os.path.join(output_dir, f"{pdf_basename}.json")
-        excel_path = os.path.join(output_dir, f"{pdf_basename}.xlsx")
+        # Fallback al nome del PDF se nulla trovato
+        nome_file = os.path.splitext(os.path.basename(args.pdf))[0]
+
+    json_path = os.path.join(output_dir, f"{nome_file}.json")
+    excel_path = os.path.join(output_dir, f"{nome_file}.xlsx")
 
     # 2. Salvataggio JSON
     print(f"\n[2/4] Salvataggio JSON: {json_path}")
@@ -649,6 +667,8 @@ Esempio:
     print("\n" + "=" * 60)
     print("RIEPILOGO")
     print("=" * 60)
+    if cognome and nome:
+        print(f"Cognome e Nome:      {cognome} {nome}")
     print(f"Codice Fiscale:      {codice_fiscale}")
     print(f"Sesso:               {sesso_label}")
     print(f"Obiettivo:           {obiettivo_label}")

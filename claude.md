@@ -89,7 +89,7 @@ giorni_teorici = (giorni_anno / 12) × mesi_lavorati
 2. **Anno 1997**: È un anno di transizione. Calcolare proporzionalmente:
    - Gen-Lug (7 mesi): regole 1993-1997 (Gruppo 1 = 120, Gruppo 2 = 260)
    - Ago-Dic (5 mesi): nuove regole (Gruppo 1 = 120, Gruppo 2 = 312)
-   - Esempio Gruppo 2: (260 × 7 / 12) + (312 × 5 / 12) = 151 + 130 = 281 (arrotonda per difetto)
+   - Esempio Gruppo 2: (260 × 7 + 312 × 5) / 12 = 3380 / 12 = 281.67 → **282** (arrotonda)
 
 3. **Ultimo anno lavorato**: Sempre completato a 12 mesi nel TEORICO (anche se ha lavorato solo parte dell'anno)
 
