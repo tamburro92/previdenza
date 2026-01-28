@@ -9,6 +9,7 @@ a fianco alla colonne dei contributi TEORICI, aggiungi anche il numero di mesi a
 a fianco a questa colonna aggiungi anche un'altra che rappresenta il numero di anni e mesi complessivi degli sommati, basta sommare nelle colonne.
 Sempre nella colonna del teorico, continua ad elencare gli anni fino al raggiungimento di 42 anni e 10 mesi contando i mesi e gli anni rimanenti fino all'anno in cui ha lavorato elencando anche i contributi teorici di quell'anno.
 Alla fine ricorda che ho bisogno del totale in giorni di contributi teorici di 42 anni e 10 mesi
+In realtà gli anni finali dipendano dal sesso, se è maschio 42 anni e 10 mesi, se è donna 41 anni e 10 mesi ( 1 anno in meno)
 
 Nel documento previdenziale, ci sono i diversei "Regimi generali" e "lavoratori dello spettacolo e sportivi professionisti"
 

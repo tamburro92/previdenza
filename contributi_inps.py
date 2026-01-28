@@ -34,6 +34,31 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
 # =============================================================================
+# UTILITA' CODICE FISCALE
+# =============================================================================
+
+def decodifica_sesso_da_cf(codice_fiscale):
+    """
+    Decodifica il sesso dal codice fiscale italiano.
+    Il giorno di nascita e' nelle posizioni 9-10 (indice 9-11).
+    Se il giorno > 40, e' donna (si aggiunge 40 al giorno reale).
+
+    Returns: 'F' per femmina, 'M' per maschio, None se non decodificabile
+    """
+    if not codice_fiscale or len(codice_fiscale) < 11:
+        return None
+
+    try:
+        giorno = int(codice_fiscale[9:11])
+        if giorno > 40:
+            return 'F'  # Donna
+        else:
+            return 'M'  # Uomo
+    except (ValueError, IndexError):
+        return None
+
+
+# =============================================================================
 # ESTRAZIONE PDF
 # =============================================================================
 
@@ -189,8 +214,13 @@ class EstrattorePDF:
 class CalcolatoreContributi:
     """Classe per calcolare i contributi REALI e TEORICI"""
 
-    def __init__(self, dati_estratti):
+    # Obiettivi contributivi per sesso
+    OBIETTIVO_DONNA = 41 * 12 + 10  # 41 anni e 10 mesi = 502 mesi
+    OBIETTIVO_UOMO = 42 * 12 + 10   # 42 anni e 10 mesi = 514 mesi
+
+    def __init__(self, dati_estratti, sesso=None):
         self.dati = dati_estratti
+        self.sesso = sesso  # 'M' o 'F'
         self.reale_per_anno = defaultdict(int)
         self.teorico_per_anno = defaultdict(int)
         self.mesi_per_anno = defaultdict(int)  # Mesi teorici per anno
@@ -198,20 +228,31 @@ class CalcolatoreContributi:
         self.ultimo_gruppo = None  # Gruppo spettacolo se applicabile
         self.anno_min = None
         self.anno_max = None
-    
+
+        # Determina obiettivo in base al sesso
+        if sesso == 'F':
+            self.obiettivo_mesi = self.OBIETTIVO_DONNA
+            self.obiettivo_label = "41a 10m"
+        else:
+            self.obiettivo_mesi = self.OBIETTIVO_UOMO
+            self.obiettivo_label = "42a 10m"
+
     def calcola(self):
         """Esegue tutti i calcoli"""
         self._calcola_regime_generale()
         self._calcola_spettacolo()
         self._determina_range_anni()
-        self._estendi_a_42_anni_10_mesi()
+        self._estendi_a_obiettivo()
 
         return {
             "reale": dict(self.reale_per_anno),
             "teorico": dict(self.teorico_per_anno),
             "mesi": dict(self.mesi_per_anno),
             "anno_min": self.anno_min,
-            "anno_max": self.anno_max
+            "anno_max": self.anno_max,
+            "sesso": self.sesso,
+            "obiettivo_mesi": self.obiettivo_mesi,
+            "obiettivo_label": self.obiettivo_label
         }
     
     def _parse_data(self, data_str):
@@ -298,17 +339,15 @@ class CalcolatoreContributi:
             self.anno_min = min(tutti_anni)
             self.anno_max = max(tutti_anni)
 
-    def _estendi_a_42_anni_10_mesi(self):
-        """Estende il calcolo fino a raggiungere 42 anni e 10 mesi (514 mesi)"""
-        OBIETTIVO_MESI = 514  # 42 anni * 12 + 10 mesi
-
+    def _estendi_a_obiettivo(self):
+        """Estende il calcolo fino a raggiungere l'obiettivo contributivo (basato sul sesso)"""
         # Calcola mesi gia' accumulati
         mesi_accumulati = sum(self.mesi_per_anno.values())
 
-        if mesi_accumulati >= OBIETTIVO_MESI:
+        if mesi_accumulati >= self.obiettivo_mesi:
             return  # Gia' raggiunto obiettivo
 
-        mesi_mancanti = OBIETTIVO_MESI - mesi_accumulati
+        mesi_mancanti = self.obiettivo_mesi - mesi_accumulati
         anno_corrente = self.anno_max + 1
 
         while mesi_mancanti > 0:
@@ -446,8 +485,9 @@ class GeneratoreExcel:
         self.ws.cell(row=last_row, column=6).border = self.border
         self.ws.cell(row=last_row, column=6).alignment = self.center
 
-        # Label finale per Anni e Mesi Cumulativi (42a 10m)
-        self.ws.cell(row=last_row, column=7, value="42a 10m").font = Font(bold=True)
+        # Label finale per Anni e Mesi Cumulativi (usa obiettivo dal calcolo)
+        obiettivo_label = self.risultati.get("obiettivo_label", "42a 10m")
+        self.ws.cell(row=last_row, column=7, value=obiettivo_label).font = Font(bold=True)
         self.ws.cell(row=last_row, column=7).border = self.border
         self.ws.cell(row=last_row, column=7).alignment = self.center
     
@@ -491,53 +531,67 @@ Esempio:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # Prefisso basato sul nome del PDF (senza estensione)
-    pdf_basename = os.path.splitext(os.path.basename(args.pdf))[0]
-
-    # Percorsi output con prefisso
-    json_path = os.path.join(output_dir, f"{pdf_basename}_estratto.json")
-    excel_path = os.path.join(output_dir, f"{pdf_basename}_contributi.xlsx")
-    
     print("=" * 60)
     print("CALCOLO CONTRIBUTI PREVIDENZIALI INPS")
     print("=" * 60)
-    
+
     # 1. Estrazione PDF
-    print(f"\n[1/3] Estrazione dati da: {args.pdf}")
+    print(f"\n[1/4] Estrazione dati da: {args.pdf}")
     estrattore = EstrattorePDF(args.pdf)
     dati = estrattore.estrai()
-    
+
+    # Decodifica sesso dal codice fiscale
+    codice_fiscale = dati["metadata"].get("codice_fiscale")
+    sesso = decodifica_sesso_da_cf(codice_fiscale)
+    sesso_label = "Donna" if sesso == 'F' else "Uomo" if sesso == 'M' else "Non determinato"
+
+    print(f"      - Codice Fiscale: {codice_fiscale}")
+    print(f"      - Sesso: {sesso_label}")
     print(f"      - Regime generale: {len(dati['regime_generale'])} record")
     print(f"      - Spettacolo: {len(dati['spettacolo'])} record")
-    
+
+    # Percorsi output basati sul codice fiscale
+    if codice_fiscale:
+        json_path = os.path.join(output_dir, f"{codice_fiscale}.json")
+        excel_path = os.path.join(output_dir, f"{codice_fiscale}.xlsx")
+    else:
+        # Fallback al nome del PDF se CF non trovato
+        pdf_basename = os.path.splitext(os.path.basename(args.pdf))[0]
+        json_path = os.path.join(output_dir, f"{pdf_basename}.json")
+        excel_path = os.path.join(output_dir, f"{pdf_basename}.xlsx")
+
     # 2. Salvataggio JSON
-    print(f"\n[2/3] Salvataggio JSON: {json_path}")
+    print(f"\n[2/4] Salvataggio JSON: {json_path}")
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(dati, f, indent=2, ensure_ascii=False)
-    
-    # 3. Calcolo contributi
-    print(f"\n[3/3] Calcolo contributi e generazione Excel: {excel_path}")
-    calcolatore = CalcolatoreContributi(dati)
+
+    # 3. Calcolo contributi (con sesso per determinare obiettivo)
+    print(f"\n[3/4] Calcolo contributi...")
+    calcolatore = CalcolatoreContributi(dati, sesso=sesso)
     risultati = calcolatore.calcola()
-    
+
     # 4. Generazione Excel
+    print(f"[4/4] Generazione Excel: {excel_path}")
     generatore = GeneratoreExcel(risultati)
     generatore.genera(excel_path)
-    
+
     # Riepilogo
     totale_reale = sum(risultati["reale"].values())
     totale_teorico = sum(risultati["teorico"].values())
     totale_mesi = sum(risultati["mesi"].values())
     num_anni = risultati["anno_max"] - risultati["anno_min"] + 1 if risultati["anno_min"] else 0
+    obiettivo_label = risultati.get("obiettivo_label", "42a 10m")
 
     print("\n" + "=" * 60)
     print("RIEPILOGO")
     print("=" * 60)
+    print(f"Codice Fiscale:      {codice_fiscale}")
+    print(f"Sesso:               {sesso_label}")
+    print(f"Obiettivo:           {obiettivo_label}")
     print(f"Anni elaborati:      {num_anni} ({risultati['anno_min']} - {risultati['anno_max']})")
     print(f"Totale giorni REALI: {totale_reale}")
     print(f"Totale giorni TEORICI: {totale_teorico}")
     print(f"Totale mesi teorici: {totale_mesi} ({totale_mesi // 12}a {totale_mesi % 12}m)")
-    print(f"Totale giorni per 42a 10m: {totale_teorico}")
     print(f"\nFile generati:")
     print(f"  - {json_path}")
     print(f"  - {excel_path}")

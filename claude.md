@@ -8,7 +8,11 @@ Dato un documento con l'estratto previdenziale INPS, costruire un foglio Excel c
 
 Gli anni devono essere raggruppati (non ripetuti) e vanno mostrati tutti gli anni dal primo all'ultimo, inserendo 0 dove non ci sono contributi.
 
-**Obiettivo finale**: Estendere il calcolo fino a raggiungere **42 anni e 10 mesi** (514 mesi totali) di contributi teorici.
+**Obiettivo finale**: Estendere il calcolo fino a raggiungere l'obiettivo contributivo basato sul sesso:
+- **Donna**: 41 anni e 10 mesi (502 mesi)
+- **Uomo**: 42 anni e 10 mesi (514 mesi)
+
+Il sesso viene decodificato automaticamente dal codice fiscale.
 
 ---
 
@@ -130,7 +134,19 @@ giorni_teorici = (giorni_anno / 12) × mesi_lavorati
 **REALE 1987**: 90 giorni (già in giorni)
 **TEORICO 1987**: Gruppo 2, anno ≤1992 → 180 gg/anno → (180/12) × 4 mesi = 60 giorni
 
-**Anni futuri**: Gli anni dopo l'ultimo lavorato vengono estesi fino a raggiungere 42 anni e 10 mesi (514 mesi), usando l'ultimo regime (Generale o Spettacolo con relativo gruppo).
+**Anni futuri**: Gli anni dopo l'ultimo lavorato vengono estesi fino a raggiungere l'obiettivo (41a 10m per donne, 42a 10m per uomini), usando l'ultimo regime (Generale o Spettacolo con relativo gruppo).
+
+---
+
+## Decodifica Sesso dal Codice Fiscale
+
+Il codice fiscale italiano contiene il giorno di nascita nelle posizioni 9-10:
+- Se il giorno <= 40: **Uomo**
+- Se il giorno > 40: **Donna** (al giorno reale viene aggiunto 40)
+
+Esempio:
+- `RSSMRA80A01H501Z` - giorno = 01 -> Uomo
+- `CNSRLA68P52H501X` - giorno = 52 -> Donna (52 - 40 = 12)
 
 ---
 
