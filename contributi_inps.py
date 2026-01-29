@@ -250,20 +250,6 @@ class CalcolatoreContributi:
             self.obiettivo_mesi = self.OBIETTIVO_UOMO
             self.obiettivo_label = "42a 10m"
 
-    def _is_tempo_indeterminato(self, anno, mese):
-        """Verifica se in un dato anno/mese il contratto e' a tempo indeterminato"""
-        if self.tempo_indeterminato_da is None:
-            return False  # Sempre tempo determinato
-        if self.tempo_indeterminato_da == "sempre":
-            return True  # Sempre tempo indeterminato
-        # Altrimenti confronta con la data
-        g, m, a = map(int, self.tempo_indeterminato_da.split('/'))
-        if anno > a:
-            return True
-        if anno == a and mese >= m:
-            return True
-        return False
-
     def calcola(self):
         """Esegue tutti i calcoli"""
         self._calcola_regime_generale()
@@ -392,10 +378,32 @@ class CalcolatoreContributi:
                 self.teorico_per_anno[anno] += giorni_senza_gruppo_per_anno[anno]
                 self.mesi_per_anno[anno] += mesi
 
+    def _conta_mesi_per_contratto(self, anno, mesi_coperti):
+        """
+        Conta quanti mesi sono a tempo determinato e quanti a tempo indeterminato.
+        Restituisce (mesi_determinato, mesi_indeterminato).
+        """
+        if self.tempo_indeterminato_da is None:
+            return len(mesi_coperti), 0  # Tutti tempo determinato
+        if self.tempo_indeterminato_da == "sempre":
+            return 0, len(mesi_coperti)  # Tutti tempo indeterminato
+
+        # Trova il mese di passaggio a tempo indeterminato
+        _, m_ti, a_ti = map(int, self.tempo_indeterminato_da.split('/'))
+
+        if anno < a_ti:
+            return len(mesi_coperti), 0  # Tutto tempo determinato
+        if anno > a_ti:
+            return 0, len(mesi_coperti)  # Tutto tempo indeterminato
+
+        # anno == a_ti: conta i mesi prima e dopo la data
+        mesi_det = len([m for m in mesi_coperti if m < m_ti])
+        mesi_indet = len([m for m in mesi_coperti if m >= m_ti])
+        return mesi_det, mesi_indet
+
     def _calcola_teorico_spettacolo_con_mesi(self, anno, mesi_coperti, gruppo):
         """
         Calcola giorni teorici per Spettacolo considerando i mesi effettivi.
-        Per il 1997 calcola proporzionalmente prima e dopo agosto.
 
         Regole:
         - Fino al 1992: Gruppo 1 = 60 gg/anno, Gruppo 2 = 180 gg/anno
@@ -404,62 +412,41 @@ class CalcolatoreContributi:
           - Tempo determinato: Gruppo 1 = 120 gg/anno, Gruppo 2 = 260 gg/anno
           - Tempo indeterminato: sempre 312 gg/anno (indipendente dal gruppo)
         """
+        giorni_det = 120 if gruppo == 1 else 260  # Giorni/anno tempo determinato
+        giorni_indet = 312  # Giorni/anno tempo indeterminato
+
         if anno <= 1992:
             giorni_anno = 60 if gruppo == 1 else 180
             return round((giorni_anno / 12) * len(mesi_coperti))
 
-        elif anno >= 1993 and anno < 1997:
-            giorni_anno = 120 if gruppo == 1 else 260
-            return round((giorni_anno / 12) * len(mesi_coperti))
+        if anno >= 1993 and anno < 1997:
+            return round((giorni_det / 12) * len(mesi_coperti))
 
-        elif anno == 1997:
-            # Anno di transizione: calcola proporzionalmente
-            # Gen-Lug (mesi 1-7): regole 1993-1997 (sempre tempo determinato)
-            # Ago-Dic (mesi 8-12): nuove regole (dipende da tempo ind/det)
+        if anno == 1997:
+            # Anno di transizione: Gen-Lug regole vecchie, Ago-Dic nuove regole
             mesi_prima_agosto = [m for m in mesi_coperti if m <= 7]
             mesi_da_agosto = [m for m in mesi_coperti if m >= 8]
 
-            # Prima di agosto: sempre regole vecchie
-            giorni_prima = 120 if gruppo == 1 else 260
-            totale_prima = giorni_prima * len(mesi_prima_agosto) / 12
+            # Prima di agosto: sempre regole 1993-1997 (tempo determinato)
+            totale_prima = (giorni_det / 12) * len(mesi_prima_agosto)
 
             # Da agosto: dipende dal tipo contratto
-            totale_dopo = 0
-            for mese in mesi_da_agosto:
-                if self._is_tempo_indeterminato(anno, mese):
-                    totale_dopo += 312 / 12
-                else:
-                    giorni = 120 if gruppo == 1 else 260
-                    totale_dopo += giorni / 12
+            mesi_det, mesi_indet = self._conta_mesi_per_contratto(anno, mesi_da_agosto)
+            totale_dopo = (giorni_det / 12) * mesi_det + (giorni_indet / 12) * mesi_indet
 
             return round(totale_prima + totale_dopo)
 
-        else:  # anno >= 1998
-            # Calcola mese per mese per gestire passaggio a tempo indeterminato
-            totale = 0
-            for mese in mesi_coperti:
-                if self._is_tempo_indeterminato(anno, mese):
-                    totale += 312 / 12
-                else:
-                    giorni_anno = 120 if gruppo == 1 else 260
-                    totale += giorni_anno / 12
-            return round(totale)
+        # anno >= 1998: calcola direttamente senza iterare
+        mesi_det, mesi_indet = self._conta_mesi_per_contratto(anno, mesi_coperti)
+        return round((giorni_det / 12) * mesi_det + (giorni_indet / 12) * mesi_indet)
 
     def _calcola_teorico_spettacolo(self, anno, mese_inizio, mesi, gruppo):
         """
         Versione per estensione anni futuri.
         Usa le regole post-1997 con gestione tempo indeterminato.
         """
-        # Per anni futuri, calcola mese per mese
-        totale = 0
-        for i in range(mesi):
-            mese = mese_inizio + i
-            if self._is_tempo_indeterminato(anno, mese):
-                totale += 312 / 12
-            else:
-                giorni_anno = 120 if gruppo == 1 else 260
-                totale += giorni_anno / 12
-        return round(totale)
+        mesi_coperti = set(range(mese_inizio, mese_inizio + mesi))
+        return self._calcola_teorico_spettacolo_con_mesi(anno, mesi_coperti, gruppo)
     
     def _determina_range_anni(self):
         """Determina anno minimo e massimo dai dati"""
