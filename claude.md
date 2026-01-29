@@ -68,12 +68,20 @@ Il calcolo varia in base al **Gruppo** e all'**anno**:
 | 1      | 120         |
 | 2      | 260         |
 
-#### Dal 1° agosto 1997 in poi (tempo indeterminato)
+#### Dal 1° agosto 1997 in poi
+
+**Tempo determinato:**
+| Gruppo | Giorni/Anno |
+|--------|-------------|
+| 1      | 120         |
+| 2      | 260         |
+
+**Tempo indeterminato:**
 | Gruppo | Giorni/Anno |
 |--------|-------------|
 | Tutti  | 312         |
 
-**Nota**: Dal 1° agosto 1997, se il lavoratore è a tempo indeterminato, si considera sempre 312 giorni/anno indipendentemente dal gruppo.
+**Nota**: Dal 1° agosto 1997, il calcolo dipende dal tipo di contratto. Se il lavoratore è a tempo indeterminato, si considera sempre 312 giorni/anno indipendentemente dal gruppo. Se è a tempo determinato, si usano le regole del periodo 1993-1997.
 
 Per periodi parziali, calcolare proporzionalmente ai mesi:
 ```
@@ -86,20 +94,25 @@ giorni_teorici = (giorni_anno / 12) × mesi_lavorati
 
 1. **Malattia/Infortunio/Maternità/Congedi**: I giorni vanno contati nel REALE ma NON nel TEORICO (sono già compresi nel periodo lavorativo principale). Nel calcolo TEORICO contano solo i record con **gruppo** (P.A.L.S. Obbligatoria)
 
-2. **Anno 1997**: È un anno di transizione. Calcolare proporzionalmente:
+2. **Record senza gruppo** (es. P.A.L.S. Serv. Militare): I giorni reali vengono copiati anche nel teorico (regola regime generale)
+
+3. **Anno 1997**: È un anno di transizione. Calcolare proporzionalmente:
    - Gen-Lug (7 mesi): regole 1993-1997 (Gruppo 1 = 120, Gruppo 2 = 260)
-   - Ago-Dic (5 mesi): nuove regole (Gruppo 1 = 120, Gruppo 2 = 312)
-   - Esempio Gruppo 2: (260 × 7 + 312 × 5) / 12 = 3380 / 12 = 281.67 → **282** (arrotonda)
+   - Ago-Dic (5 mesi): nuove regole (dipende da tempo ind/det)
+   - Esempio Gruppo 2 tempo indeterminato: (260 × 7 + 312 × 5) / 12 = 3380 / 12 = 281.67 → **282** (arrotonda)
+   - Esempio Gruppo 2 tempo determinato: (260 × 7 + 260 × 5) / 12 = 3120 / 12 = **260**
 
-3. **Ultimo anno lavorato**: Sempre completato a 12 mesi nel TEORICO (anche se ha lavorato solo parte dell'anno)
+4. **Ultimo anno lavorato**: Sempre completato a 12 mesi nel TEORICO (anche se ha lavorato solo parte dell'anno)
 
-4. **Anni senza contributi**: Inserire 0 (non omettere l'anno)
+5. **Anni senza contributi**: Inserire 0 (non omettere l'anno)
 
-5. **Gruppi**:
+6. **Mesi sovrapposti**: Quando ci sono più record nello stesso anno con periodi sovrapposti, i mesi vengono unificati (merge) per evitare di contare più di 12 mesi per anno
+
+7. **Gruppi**:
    - Gruppo 1: Artisti
    - Gruppo 2: Impiegati / Maestranze
 
-6. **Codici qualifica comuni**:
+8. **Codici qualifica comuni**:
    - 110: Gruppo tecnici
    - 113: Tecnici del montaggio, del suono e sound designer
    - 201: Impiegati amministrativi e tecnici
@@ -160,18 +173,32 @@ previdenza/
 ├── contributi_inps.py
 ├── CLAUDE.md
 ├── output/
-│   ├── mario_rossi_estratto.json
-│   ├── mario_rossi_contributi.xlsx
-│   ├── luigi_bianchi_estratto.json
-│   └── luigi_bianchi_contributi.xlsx
+│   ├── ROSSI MARIO.json
+│   ├── ROSSI MARIO.xlsx
+│   ├── BIANCHI LUIGI.json
+│   └── BIANCHI LUIGI.xlsx
 ```
 
 ### Uso
 
 ```bash
+# Tempo determinato (default)
 python contributi_inps.py <nome_file.pdf>
+
+# Sempre tempo indeterminato
+python contributi_inps.py <nome_file.pdf> -ti
+
+# Tempo indeterminato da una data specifica
+python contributi_inps.py <nome_file.pdf> -ti DD/MM/YYYY
 ```
 
-I file di output vengono salvati nella cartella `output/` con il nome del PDF come prefisso:
-- `{nome}_estratto.json` - dati grezzi estratti dal PDF
-- `{nome}_contributi.xlsx` - calcolo finale con estensione a 42a 10m
+**Parametro `-ti` (tempo indeterminato):**
+- Non specificato: sempre tempo determinato
+- `-ti` senza data: sempre tempo indeterminato
+- `-ti DD/MM/YYYY`: tempo indeterminato da quella data in poi
+
+I file di output vengono salvati nella cartella `output/` con Cognome e Nome estratti dal PDF:
+- `{Cognome} {Nome}.json` - dati grezzi estratti dal PDF
+- `{Cognome} {Nome}.xlsx` - calcolo finale con estensione all'obiettivo
+
+Se il nome non viene trovato, viene usato il codice fiscale come fallback.

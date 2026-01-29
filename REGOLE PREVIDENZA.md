@@ -34,9 +34,12 @@ prendi i mesi lavorati dal documento per ogni qnno arrotonda sempre per eccesso 
 2-Lavoratori dello Spettacolo e Sportivi Professionisti
 il calcolo cambia a seconda del gruppo e dell'anno:
 - fino al 1992 compreso, se è gruppo 1, 1 anno equivale a 60 giorni, se è gruppo 2 equivale 180 ( ricorda di contare il numero di mesi e moltiplicare o dividere se ha non ha fatto anno intero)
+
 - dal 1993 al 31 luglio 1997, se è gruppo 1, 1 anno = 120 giorni, se gruppo 2, 1 anno = 260 giorni
-- dal 1 agosto 1997, se è gruppo 1, 1 anno = 120 giorni, se è gruppo 2, 1 anno è 312
--- in realta se è a tempo inderminato dal 1 agosto 1997 1 anno è sempre 312 indipendemente del gruppo, se è gruppo 2 l'anno è di 260 giorni fin tanto che non diventa a tempo indermintato che poi passa a 312
+
+- dal 1 agosto 1997:
+-- se è tempo determinato, se è gruppo 1, 1 anno = 120 giorni, se è gruppo 2, 1 anno è 260
+-- se è a tempo indeterminato indipendentemente dal gruppo è sempre 312
 
 ---
 

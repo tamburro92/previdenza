@@ -230,9 +230,10 @@ class CalcolatoreContributi:
     OBIETTIVO_DONNA = 41 * 12 + 10  # 41 anni e 10 mesi = 502 mesi
     OBIETTIVO_UOMO = 42 * 12 + 10   # 42 anni e 10 mesi = 514 mesi
 
-    def __init__(self, dati_estratti, sesso=None):
+    def __init__(self, dati_estratti, sesso=None, tempo_indeterminato_da=None):
         self.dati = dati_estratti
         self.sesso = sesso  # 'M' o 'F'
+        self.tempo_indeterminato_da = tempo_indeterminato_da  # None, "sempre", o "DD/MM/YYYY"
         self.reale_per_anno = defaultdict(int)
         self.teorico_per_anno = defaultdict(int)
         self.mesi_per_anno = defaultdict(int)  # Mesi teorici per anno
@@ -248,6 +249,20 @@ class CalcolatoreContributi:
         else:
             self.obiettivo_mesi = self.OBIETTIVO_UOMO
             self.obiettivo_label = "42a 10m"
+
+    def _is_tempo_indeterminato(self, anno, mese):
+        """Verifica se in un dato anno/mese il contratto e' a tempo indeterminato"""
+        if self.tempo_indeterminato_da is None:
+            return False  # Sempre tempo determinato
+        if self.tempo_indeterminato_da == "sempre":
+            return True  # Sempre tempo indeterminato
+        # Altrimenti confronta con la data
+        g, m, a = map(int, self.tempo_indeterminato_da.split('/'))
+        if anno > a:
+            return True
+        if anno == a and mese >= m:
+            return True
+        return False
 
     def calcola(self):
         """Esegue tutti i calcoli"""
@@ -298,9 +313,10 @@ class CalcolatoreContributi:
     
     def _calcola_spettacolo(self):
         """Calcola contributi Lavoratori Spettacolo"""
-        # Prima passa: somma giorni REALI per tutti i record con giorni
-        # e raccogli i periodi con gruppo per calcolo TEORICO
-        periodi_per_anno = defaultdict(list)  # anno -> [(mese_inizio, mese_fine, gruppo)]
+        # Raccogli periodi per anno: con gruppo e senza gruppo separatamente
+        periodi_con_gruppo = defaultdict(list)  # anno -> [(mese_inizio, mese_fine, gruppo)]
+        periodi_senza_gruppo = defaultdict(list)  # anno -> [(mese_inizio, mese_fine, giorni)]
+        giorni_senza_gruppo_per_anno = defaultdict(int)  # anno -> giorni totali (per record senza gruppo)
 
         for record in self.dati["spettacolo"]:
             anno_inizio, mese_inizio, _ = self._parse_data(record["dal"])
@@ -312,37 +328,70 @@ class CalcolatoreContributi:
             if giorni:
                 self.reale_per_anno[anno_inizio] += giorni
 
-            # Per TEORICO: raccogli solo i periodi con gruppo (P.A.L.S. Obbligatoria)
             if gruppo:
-                # Gestisce periodi che coprono piu' anni
+                # Record CON gruppo: calcola in base alle regole spettacolo
                 if anno_inizio == anno_fine:
-                    periodi_per_anno[anno_inizio].append((mese_inizio, mese_fine, gruppo))
+                    periodi_con_gruppo[anno_inizio].append((mese_inizio, mese_fine, gruppo))
                 else:
                     # Periodo che attraversa anni: spezza per anno
-                    periodi_per_anno[anno_inizio].append((mese_inizio, 12, gruppo))
+                    periodi_con_gruppo[anno_inizio].append((mese_inizio, 12, gruppo))
                     for anno in range(anno_inizio + 1, anno_fine):
-                        periodi_per_anno[anno].append((1, 12, gruppo))
-                    periodi_per_anno[anno_fine].append((1, mese_fine, gruppo))
+                        periodi_con_gruppo[anno].append((1, 12, gruppo))
+                    periodi_con_gruppo[anno_fine].append((1, mese_fine, gruppo))
 
                 self.ultimo_regime = "spettacolo"
                 self.ultimo_gruppo = gruppo
 
-        # Seconda passa: calcola TEORICO unificando i periodi per ogni anno
-        for anno, periodi in periodi_per_anno.items():
+            elif giorni:
+                # Record SENZA gruppo (es. Servizio Militare): raccogli periodi
+                if anno_inizio == anno_fine:
+                    periodi_senza_gruppo[anno_inizio].append((mese_inizio, mese_fine))
+                    giorni_senza_gruppo_per_anno[anno_inizio] += giorni
+                else:
+                    # Periodo che attraversa anni: spezza per anno
+                    periodi_senza_gruppo[anno_inizio].append((mese_inizio, 12))
+                    periodi_senza_gruppo[anno_fine].append((1, mese_fine))
+                    # Dividi giorni proporzionalmente (semplificato: tutto al primo anno)
+                    giorni_senza_gruppo_per_anno[anno_inizio] += giorni
+
+        # Calcola TEORICO per record CON gruppo (regole spettacolo)
+        for anno, periodi in periodi_con_gruppo.items():
             # Unifica i mesi coperti (evita duplicati)
             mesi_coperti = set()
             gruppo_anno = None
             for mese_inizio, mese_fine, gruppo in periodi:
                 for m in range(mese_inizio, mese_fine + 1):
                     mesi_coperti.add(m)
-                gruppo_anno = gruppo  # Usa l'ultimo gruppo trovato
+                gruppo_anno = gruppo
+
+            # Unifica anche con eventuali periodi senza gruppo dello stesso anno
+            if anno in periodi_senza_gruppo:
+                for mese_inizio, mese_fine in periodi_senza_gruppo[anno]:
+                    for m in range(mese_inizio, mese_fine + 1):
+                        mesi_coperti.add(m)
+                # Rimuovi da periodi_senza_gruppo perche' gia' conteggiato
+                del periodi_senza_gruppo[anno]
 
             mesi = len(mesi_coperti)
             if mesi > 0 and gruppo_anno:
                 giorni_teorici = self._calcola_teorico_spettacolo_con_mesi(anno, mesi_coperti, gruppo_anno)
                 self.teorico_per_anno[anno] += giorni_teorici
                 self.mesi_per_anno[anno] += mesi
-    
+
+        # Calcola TEORICO per record SENZA gruppo rimasti (non sovrapposti con gruppo)
+        # Es. Servizio Militare: giorni reali = giorni teorici
+        for anno, periodi in periodi_senza_gruppo.items():
+            mesi_coperti = set()
+            for mese_inizio, mese_fine in periodi:
+                for m in range(mese_inizio, mese_fine + 1):
+                    mesi_coperti.add(m)
+
+            mesi = len(mesi_coperti)
+            if mesi > 0:
+                # Usa i giorni reali come teorici
+                self.teorico_per_anno[anno] += giorni_senza_gruppo_per_anno[anno]
+                self.mesi_per_anno[anno] += mesi
+
     def _calcola_teorico_spettacolo_con_mesi(self, anno, mesi_coperti, gruppo):
         """
         Calcola giorni teorici per Spettacolo considerando i mesi effettivi.
@@ -351,42 +400,66 @@ class CalcolatoreContributi:
         Regole:
         - Fino al 1992: Gruppo 1 = 60 gg/anno, Gruppo 2 = 180 gg/anno
         - 1993 - luglio 1997: Gruppo 1 = 120 gg/anno, Gruppo 2 = 260 gg/anno
-        - Da agosto 1997 in poi: Gruppo 1 = 120 gg/anno, Gruppo 2 = 312 gg/anno
+        - Dal 1 agosto 1997 in poi:
+          - Tempo determinato: Gruppo 1 = 120 gg/anno, Gruppo 2 = 260 gg/anno
+          - Tempo indeterminato: sempre 312 gg/anno (indipendente dal gruppo)
         """
         if anno <= 1992:
             giorni_anno = 60 if gruppo == 1 else 180
-            return int((giorni_anno / 12) * len(mesi_coperti))
+            return round((giorni_anno / 12) * len(mesi_coperti))
 
         elif anno >= 1993 and anno < 1997:
             giorni_anno = 120 if gruppo == 1 else 260
-            return int((giorni_anno / 12) * len(mesi_coperti))
+            return round((giorni_anno / 12) * len(mesi_coperti))
 
         elif anno == 1997:
             # Anno di transizione: calcola proporzionalmente
-            # Gen-Lug (mesi 1-7): regole 1993-1997
-            # Ago-Dic (mesi 8-12): nuove regole
-            mesi_prima_agosto = len([m for m in mesi_coperti if m <= 7])
-            mesi_da_agosto = len([m for m in mesi_coperti if m >= 8])
+            # Gen-Lug (mesi 1-7): regole 1993-1997 (sempre tempo determinato)
+            # Ago-Dic (mesi 8-12): nuove regole (dipende da tempo ind/det)
+            mesi_prima_agosto = [m for m in mesi_coperti if m <= 7]
+            mesi_da_agosto = [m for m in mesi_coperti if m >= 8]
 
+            # Prima di agosto: sempre regole vecchie
             giorni_prima = 120 if gruppo == 1 else 260
-            giorni_dopo = 120 if gruppo == 1 else 312
+            totale_prima = giorni_prima * len(mesi_prima_agosto) / 12
 
-            # Calcola tutto insieme e arrotonda una volta sola
-            totale = (giorni_prima * mesi_prima_agosto + giorni_dopo * mesi_da_agosto) / 12
-            # 281,6 -> 282
-            return round(totale)
+            # Da agosto: dipende dal tipo contratto
+            totale_dopo = 0
+            for mese in mesi_da_agosto:
+                if self._is_tempo_indeterminato(anno, mese):
+                    totale_dopo += 312 / 12
+                else:
+                    giorni = 120 if gruppo == 1 else 260
+                    totale_dopo += giorni / 12
+
+            return round(totale_prima + totale_dopo)
 
         else:  # anno >= 1998
-            giorni_anno = 120 if gruppo == 1 else 312
-            return int((giorni_anno / 12) * len(mesi_coperti))
+            # Calcola mese per mese per gestire passaggio a tempo indeterminato
+            totale = 0
+            for mese in mesi_coperti:
+                if self._is_tempo_indeterminato(anno, mese):
+                    totale += 312 / 12
+                else:
+                    giorni_anno = 120 if gruppo == 1 else 260
+                    totale += giorni_anno / 12
+            return round(totale)
 
     def _calcola_teorico_spettacolo(self, anno, mese_inizio, mesi, gruppo):
         """
-        Versione semplificata per estensione anni futuri.
-        Usa le regole post-1997.
+        Versione per estensione anni futuri.
+        Usa le regole post-1997 con gestione tempo indeterminato.
         """
-        giorni_anno = 120 if gruppo == 1 else 312
-        return int((giorni_anno / 12) * mesi)
+        # Per anni futuri, calcola mese per mese
+        totale = 0
+        for i in range(mesi):
+            mese = mese_inizio + i
+            if self._is_tempo_indeterminato(anno, mese):
+                totale += 312 / 12
+            else:
+                giorni_anno = 120 if gruppo == 1 else 260
+                totale += giorni_anno / 12
+        return round(totale)
     
     def _determina_range_anni(self):
         """Determina anno minimo e massimo dai dati"""
@@ -439,13 +512,15 @@ class CalcolatoreContributi:
             # Completa a 12 mesi
             self.mesi_per_anno[self.anno_max] = 12
 
-            # Ricalcola giorni teorici per l'anno completo
+            # Ricalcola giorni teorici per l'anno completo (tutti i 12 mesi)
             if self.ultimo_regime == "generale":
                 self.teorico_per_anno[self.anno_max] = 12 * 26  # 312
             else:  # spettacolo
                 gruppo = self.ultimo_gruppo or 2
-                giorni_anno = 120 if gruppo == 1 else 312
-                self.teorico_per_anno[self.anno_max] = giorni_anno
+                mesi_completi = set(range(1, 13))  # tutti i 12 mesi
+                self.teorico_per_anno[self.anno_max] = self._calcola_teorico_spettacolo_con_mesi(
+                    self.anno_max, mesi_completi, gruppo
+                )
 
 
 # =============================================================================
@@ -590,13 +665,30 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Esempio:
-    python contributi_inps.py certificazione.pdf
-    python contributi_inps.py mario_rossi.pdf
+    python contributi_inps.py certificazione.pdf                    # Tempo determinato
+    python contributi_inps.py certificazione.pdf -ti                # Sempre tempo indeterminato
+    python contributi_inps.py certificazione.pdf -ti 01/08/1997     # Tempo indeterminato dal 1/8/1997
         """
     )
     parser.add_argument("pdf", help="Percorso del file PDF INPS")
+    parser.add_argument("-ti", "--tempo-indeterminato", nargs="?", const="sempre",
+                        metavar="DD/MM/YYYY",
+                        help="Tempo indeterminato: senza data = sempre, con data = da quella data")
 
     args = parser.parse_args()
+
+    # Parsing tempo indeterminato
+    tempo_indeterminato_da = None  # None = sempre tempo determinato
+    if args.tempo_indeterminato:
+        if args.tempo_indeterminato == "sempre":
+            tempo_indeterminato_da = "sempre"
+        else:
+            # Valida formato data
+            if not re.match(r'\d{2}/\d{2}/\d{4}', args.tempo_indeterminato):
+                print(f"Errore: Formato data non valido: {args.tempo_indeterminato}")
+                print("Usare formato DD/MM/YYYY")
+                sys.exit(1)
+            tempo_indeterminato_da = args.tempo_indeterminato
 
     # Verifica esistenza PDF
     if not os.path.exists(args.pdf):
@@ -628,6 +720,13 @@ Esempio:
     if cognome and nome:
         print(f"      - Cognome e Nome: {cognome} {nome}")
     print(f"      - Sesso: {sesso_label}")
+    if tempo_indeterminato_da:
+        if tempo_indeterminato_da == "sempre":
+            print(f"      - Contratto: Tempo indeterminato (sempre)")
+        else:
+            print(f"      - Contratto: Tempo indeterminato dal {tempo_indeterminato_da}")
+    else:
+        print(f"      - Contratto: Tempo determinato")
     print(f"      - Regime generale: {len(dati['regime_generale'])} record")
     print(f"      - Spettacolo: {len(dati['spettacolo'])} record")
 
@@ -650,7 +749,7 @@ Esempio:
 
     # 3. Calcolo contributi (con sesso per determinare obiettivo)
     print(f"\n[3/4] Calcolo contributi...")
-    calcolatore = CalcolatoreContributi(dati, sesso=sesso)
+    calcolatore = CalcolatoreContributi(dati, sesso=sesso, tempo_indeterminato_da=tempo_indeterminato_da)
     risultati = calcolatore.calcola()
 
     # 4. Generazione Excel
