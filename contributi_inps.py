@@ -373,6 +373,7 @@ class CalcolatoreContributi:
 
             # Calcola tutto insieme e arrotonda una volta sola
             totale = (giorni_prima * mesi_prima_agosto + giorni_dopo * mesi_da_agosto) / 12
+            # 281,6 -> 282
             return round(totale)
 
         else:  # anno >= 1998
