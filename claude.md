@@ -166,30 +166,37 @@ Esempio:
 
 ---
 
-## Struttura Output
+## Struttura Progetto
 
 ```
 previdenza/
-├── contributi_inps.py
 ├── CLAUDE.md
-├── output/
-│   ├── ROSSI MARIO.json
-│   ├── ROSSI MARIO.xlsx
-│   ├── BIANCHI LUIGI.json
-│   └── BIANCHI LUIGI.xlsx
+├── requirements.txt
+├── previdenza/
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── estrattore.py
+│   ├── calcolatore.py
+│   ├── generatore.py
+│   ├── core.py
+│   ├── cli.py
+│   └── gui.py
 ```
 
 ### Uso
 
 ```bash
+# Avvia GUI
+python -m previdenza
+
 # Tempo determinato (default)
-python contributi_inps.py <nome_file.pdf>
+python -m previdenza <nome_file.pdf>
 
 # Sempre tempo indeterminato
-python contributi_inps.py <nome_file.pdf> -ti
+python -m previdenza <nome_file.pdf> -ti
 
 # Tempo indeterminato da una data specifica
-python contributi_inps.py <nome_file.pdf> -ti DD/MM/YYYY
+python -m previdenza <nome_file.pdf> -ti DD/MM/YYYY
 ```
 
 **Parametro `-ti` (tempo indeterminato):**
@@ -197,7 +204,9 @@ python contributi_inps.py <nome_file.pdf> -ti DD/MM/YYYY
 - `-ti` senza data: sempre tempo indeterminato
 - `-ti DD/MM/YYYY`: tempo indeterminato da quella data in poi
 
-I file di output vengono salvati nella cartella `output/` con Cognome e Nome estratti dal PDF:
+### Output
+
+I file di output vengono salvati nella **stessa cartella del PDF di input**:
 - `{Cognome} {Nome}.json` - dati grezzi estratti dal PDF
 - `{Cognome} {Nome}.xlsx` - calcolo finale con estensione all'obiettivo
 

@@ -11,27 +11,26 @@ pip install pdfplumber openpyxl
 ## Uso
 
 ```bash
-# Tempo determinato (default)
-python contributi_inps.py estratto_conto.pdf
+# Avvia GUI
+python -m previdenza
 
-# Tempo indeterminato (sempre)
-python contributi_inps.py estratto_conto.pdf -ti
+# CLI - Tempo determinato (default)
+python -m previdenza estratto_conto.pdf
 
-# Tempo indeterminato da una data
-python contributi_inps.py estratto_conto.pdf -ti 01/08/2000
+# CLI - Tempo indeterminato (sempre)
+python -m previdenza estratto_conto.pdf -ti
+
+# CLI - Tempo indeterminato da una data
+python -m previdenza estratto_conto.pdf -ti 01/08/2000
 ```
 
 ## Output
 
-I file vengono salvati in `output/` con nome `{Cognome} {Nome}.xlsx` e `.json`:
+I file vengono salvati nella stessa cartella del PDF di input:
+- `{Cognome} {Nome}.xlsx` - calcolo contributi
+- `{Cognome} {Nome}.json` - dati grezzi (solo CLI)
 
+Il calcolo include:
 - **Giorni REALI**: contributi effettivamente versati
-- **Giorni TEORICI**: contributi convenzionali (regole spettacolo/generale)
+- **Giorni TEORICI**: contributi convenzionali
 - **Proiezione**: estende fino a 41a 10m (donne) o 42a 10m (uomini)
-
-## Regimi supportati
-
-| Regime | Unità | Conversione |
-|--------|-------|-------------|
-| Generale | Settimane | 1 sett = 6 giorni |
-| Spettacolo | Giorni | Varia per gruppo e periodo |
