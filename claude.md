@@ -36,7 +36,10 @@ giorni_reali = settimane × 6
 ### 2. Lavoratori dello Spettacolo
 I contributi sono già in giorni, usare il valore diretto.
 
-### 3. Altri casi
+### 3. Cap massimo annuo
+Se i giorni reali di un anno superano 312, vanno troncati a 312.
+
+### 4. Altri casi
 Non procedere.
 
 ---

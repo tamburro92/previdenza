@@ -57,6 +57,7 @@ class CalcolatoreContributi:
         """Esegue tutti i calcoli"""
         self._calcola_regime_generale()
         self._calcola_spettacolo()
+        self._applica_cap_giorni_reali()
         self._determina_range_anni()
         self._estendi_a_obiettivo()
 
@@ -70,6 +71,12 @@ class CalcolatoreContributi:
             "obiettivo_mesi": self.obiettivo_mesi,
             "obiettivo_label": self.obiettivo_label
         }
+
+    def _applica_cap_giorni_reali(self):
+        """Applica il cap massimo annuo ai giorni reali (312)"""
+        for anno, reale_per_anno in list(self.reale_per_anno.items()):
+            if reale_per_anno > 312:
+                self.reale_per_anno[anno] = 312
 
     def _parse_data(self, data_str):
         """Converte stringa data in (anno, mese, giorno)"""
