@@ -42,6 +42,7 @@ class CalcolatoreContributi:
         self.mesi_per_anno = defaultdict(int)  # Mesi teorici per anno
         self.ultimo_regime = None  # Per estensione anni futuri
         self.ultimo_gruppo = None  # Gruppo spettacolo se applicabile
+        self.mesi_esclusi = defaultdict(set)  # Mesi esclusi per disoccupazione (note "3"/"O")
         self.anno_min = None
         self.anno_max = None
 
@@ -99,16 +100,47 @@ class CalcolatoreContributi:
             giorni_reali = settimane * 6
             self.reale_per_anno[anno] += giorni_reali
 
-            # TEORICO: mesi * 26
-            mesi = self._conta_mesi(record["dal"], record["al"])
-            giorni_teorici = mesi * 26
-            self.teorico_per_anno[anno] += giorni_teorici
-            self.mesi_per_anno[anno] += mesi
+            # TEORICO: mesi * 26 (escludi record con note "3" o O")
+            nota = record.get("note", "")
+            if nota not in ("3", "O"):
+                mesi = self._conta_mesi(record["dal"], record["al"])
+                giorni_teorici = mesi * 26
+                self.teorico_per_anno[anno] += giorni_teorici
+                self.mesi_per_anno[anno] += mesi
 
             self.ultimo_regime = "generale"
 
+    def _raccogli_mesi_esclusi(self):
+        """Raccoglie i mesi da escludere dal teorico spettacolo.
+
+        I record del regime generale con note '3' o '0' (disoccupazione)
+        generano mesi che vanno sottratti dal calcolo teorico spettacolo.
+        """
+        mesi_esclusi = defaultdict(set)
+        for record in self.dati["regime_generale"]:
+            nota = record.get("note", "")
+            if nota in ("3", "O"):
+                anno_inizio, mese_inizio, _ = self._parse_data(record["dal"])
+                anno_fine, mese_fine, _ = self._parse_data(record["al"])
+                if anno_inizio == anno_fine:
+                    for m in range(mese_inizio, mese_fine + 1):
+                        mesi_esclusi[anno_inizio].add(m)
+                else:
+                    for m in range(mese_inizio, 13):
+                        mesi_esclusi[anno_inizio].add(m)
+                    for anno in range(anno_inizio + 1, anno_fine):
+                        for m in range(1, 13):
+                            mesi_esclusi[anno].add(m)
+                    for m in range(1, mese_fine + 1):
+                        mesi_esclusi[anno_fine].add(m)
+        return mesi_esclusi
+
     def _calcola_spettacolo(self):
         """Calcola contributi Lavoratori Spettacolo"""
+        # Raccogli mesi esclusi da disoccupazione con note "3"/O"
+        self.mesi_esclusi = self._raccogli_mesi_esclusi()
+        mesi_esclusi = self.mesi_esclusi
+
         # Raccogli periodi per anno: con gruppo e senza gruppo separatamente
         periodi_con_gruppo = defaultdict(list)  # anno -> [(mese_inizio, mese_fine, gruppo)]
         periodi_senza_gruppo = defaultdict(list)  # anno -> [(mese_inizio, mese_fine, giorni)]
@@ -167,6 +199,9 @@ class CalcolatoreContributi:
                         mesi_coperti.add(m)
                 # Rimuovi da periodi_senza_gruppo perche' gia' conteggiato
                 del periodi_senza_gruppo[anno]
+
+            # Sottrai mesi esclusi per disoccupazione (note "3"/O")
+            mesi_coperti -= mesi_esclusi.get(anno, set())
 
             mesi = len(mesi_coperti)
             if mesi > 0 and gruppo_anno:
@@ -300,21 +335,26 @@ class CalcolatoreContributi:
         self.anno_max = anno_corrente - 1
 
     def _completa_ultimo_anno(self):
-        """Completa l'ultimo anno lavorato a 12 mesi nel TEORICO"""
+        """Completa l'ultimo anno lavorato a 12 mesi nel TEORICO,
+        rispettando i mesi esclusi per disoccupazione."""
         if not self.anno_max:
             return
 
         mesi_ultimo_anno = self.mesi_per_anno.get(self.anno_max, 0)
-        if mesi_ultimo_anno > 0 and mesi_ultimo_anno < 12:
-            # Completa a 12 mesi
-            self.mesi_per_anno[self.anno_max] = 12
+        # max_mesi tiene conto dei mesi esclusi per disoccupazione
+        mesi_esclusi_count = len(self.mesi_esclusi.get(self.anno_max, set()))
+        max_mesi = 12 - mesi_esclusi_count
+        if mesi_ultimo_anno > 0 and mesi_ultimo_anno < max_mesi:
+            # Completa al massimo possibile
+            self.mesi_per_anno[self.anno_max] = max_mesi
 
-            # Ricalcola giorni teorici per l'anno completo (tutti i 12 mesi)
+            # Ricalcola giorni teorici per l'anno completo
             if self.ultimo_regime == "generale":
-                self.teorico_per_anno[self.anno_max] = 12 * 26  # 312
+                self.teorico_per_anno[self.anno_max] = max_mesi * 26
             else:  # spettacolo
                 gruppo = self.ultimo_gruppo or 2
-                mesi_completi = set(range(1, 13))  # tutti i 12 mesi
+                # Costruisci i mesi coperti escludendo quelli di disoccupazione
+                mesi_coperti = set(range(1, 13)) - self.mesi_esclusi.get(self.anno_max, set())
                 self.teorico_per_anno[self.anno_max] = self._calcola_teorico_spettacolo_con_mesi(
-                    self.anno_max, mesi_completi, gruppo
+                    self.anno_max, mesi_coperti, gruppo
                 )

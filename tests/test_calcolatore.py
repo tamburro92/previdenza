@@ -147,6 +147,7 @@ class TestDisoccupazione(unittest.TestCase):
                     "al": "31/12/2007",
                     "tipo": "Disoccupazione",
                     "settimane": 5,
+                    "note": "3"
                 },
             ],
             "spettacolo": [
@@ -188,12 +189,14 @@ class TestDisoccupazione(unittest.TestCase):
                     "al": "03/02/2008",
                     "tipo": "Disoccupazione",
                     "settimane": 4,
+                    "note": "3"
                 },
                 {
                     "dal": "08/07/2008",
                     "al": "27/08/2008",
                     "tipo": "Disoccupazione",
                     "settimane": 8,
+                    "note": "O"
                 },
             ],
             "spettacolo": [
@@ -217,7 +220,8 @@ class TestDisoccupazione(unittest.TestCase):
         risultati = _calcola_senza_estensione(dati)
 
         self.assertEqual(risultati["mesi"][2008], 8)
-        self.assertEqual(risultati["teorico"][2008], 80)
+        # 8 mesi a tempo indeterminato, gruppo 1, anno 2008: 312/12 * 8 = 208
+        self.assertEqual(risultati["teorico"][2008], 208)
         self.assertEqual(risultati["reale"][2008], 72 + 188 + 42)
 
 
@@ -314,4 +318,5 @@ class TestSpettacoloPost1997(unittest.TestCase):
 
         self.assertEqual(risultati["mesi"][1997], 12)
         self.assertEqual(risultati["teorico"][1997], 282)
-        self.assertEqual(risultati["reale"][1997], 338)
+        # reale cappato a 312 (cap massimo annuo)
+        self.assertEqual(risultati["reale"][1997], 312)
