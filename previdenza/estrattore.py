@@ -103,6 +103,11 @@ class EstrattorePDF:
                 "unita": "settimane"
             }
             self._aggiungi_retribuzione(record, row)
+
+            # Note in posizione 8
+            if len(row) > 8 and row[8] and str(row[8]).strip():
+                record["note"] = str(row[8]).strip()
+
             self.dati["regime_generale"].append(record)
 
     def _processa_spettacolo(self, row, dal, al, tipo):
@@ -148,6 +153,10 @@ class EstrattorePDF:
             record["codice_qualifica"] = codice_qualifica
         if retribuzione:
             record["retribuzione"] = retribuzione
+
+        # Note in posizione 8
+        if len(row) > 8 and row[8] and str(row[8]).strip():
+            record["note"] = str(row[8]).strip()
 
         self.dati["spettacolo"].append(record)
 
